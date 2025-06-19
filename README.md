@@ -65,7 +65,7 @@ Make sure to replace `<your-cloudflare-project-name>` with the name of your proj
 *   **Build Configuration in Cloudflare Pages UI**:
     *   **Framework preset**: Select **Next.js**.
     *   **Build command**: `npm run build:cloudflare`
-    *   **Build output directory**: Typically, with the Next.js preset, Cloudflare Pages will correctly identify the build output. You can usually leave this as the default, or set it to `/` (project root). The `@cloudflare/next-on-pages` tool generates its output in `.vercel/output` at your project root, and the Next.js preset understands this structure.
+    *   **Build output directory**: **IMPORTANT:** Set this to **`.vercel/output/static`**. This is crucial for ensuring Cloudflare Pages only deploys the optimized static assets prepared by `@cloudflare/next-on-pages` and avoids issues with large cache files from the `.next` directory.
     *   **Root directory**: Leave blank or set to `/` (this is the root of your repository where `package.json` is located).
     *   **Environment Variables**:
         *   **Recommended**: Set `NODE_VERSION` to `18` or `20` (e.g., `NODE_VERSION = 20`).
@@ -76,4 +76,3 @@ Make sure to replace `<your-cloudflare-project-name>` with the name of your proj
 *   **Firebase Services**: Your application's frontend will continue to interact with your Firebase backend (Firestore, Auth) as configured in `src/lib/firebase/firebase.ts`. Ensure your Firebase project's security rules allow access from your Cloudflare Pages domain if necessary (though typically not an issue for client-side SDK usage).
 *   **Edge Runtime Compatibility**: Server Components, Server Actions, and API Routes in your Next.js application will run on Cloudflare's Edge Workers. Ensure any server-side code is compatible with the Edge runtime (e.g., avoid Node.js-specific APIs not available in Workers unless you configure Node.js compatibility for your Pages project).
 *   The primary configuration of this app remains Firebase-centric. This Cloudflare setup provides an alternative deployment target for the Next.js frontend.
-```
