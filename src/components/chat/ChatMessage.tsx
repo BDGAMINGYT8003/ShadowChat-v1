@@ -49,7 +49,7 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
     ? (message.timestamp as any).toDate() 
     : message.timestamp instanceof Date
     ? message.timestamp
-    : new Date();
+    : new Date(); // Fallback, though Firestore timestamps should be instances of Timestamp
 
   const handleDeleteMessage = useCallback(async () => {
     if (!isCurrentUserMessage || !message.id || !message.chatId) {
@@ -164,15 +164,14 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
       </div>
       {isCurrentUserMessage && (
         <Avatar className="h-8 w-8 self-end">
-          {currentUser?.photoURL ? (
-            <Image src={currentUser.photoURL} alt={currentUser.displayName || "User"} width={32} height={32} className="rounded-full" />
-          ) : (
-            <AvatarFallback>{getInitials(currentUser?.displayName)}</AvatarFallback>
-          )}
+          {/* Assuming currentUser.photoURL is not available for now, if it were, an Image component would go here */}
+          <AvatarFallback>{getInitials(currentUser?.displayName)}</AvatarFallback>
         </Avatar>
       )}
     </div>
   );
 });
+
+ChatMessage.displayName = 'ChatMessage';
 
 export { ChatMessage };
