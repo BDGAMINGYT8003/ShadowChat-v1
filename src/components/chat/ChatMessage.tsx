@@ -13,7 +13,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added missing import
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase/firebase";
@@ -114,7 +114,7 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
                 onClick={() => {
                   const newWindow = window.open();
                   if (newWindow) {
-                    newWindow.document.write(`<img src="${message.imageDataUri}" alt="Full image" style="max-width: 100%; max-height: 100vh; display: block; margin: auto;" />`);
+                    newWindow.document.write(\`<img src="\${message.imageDataUri}" alt="Full image" style="max-width: 100%; max-height: 100vh; display: block; margin: auto;" />\`);
                     newWindow.document.title = "Image Preview";
                   }
                 }}

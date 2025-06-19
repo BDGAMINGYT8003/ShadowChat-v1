@@ -12,10 +12,9 @@ export interface Message {
   id: string;
   chatId?: string; // Added to help with Firestore path for deletion
   text?: string;
-  imageDataUri?: string; 
+  imageDataUri?: string; // For Base64 encoded image data
   senderId: string;
   senderName: string | null;
   timestamp: Timestamp | Date;
   reactions?: { [emoji: string]: string[] };
 }
-
