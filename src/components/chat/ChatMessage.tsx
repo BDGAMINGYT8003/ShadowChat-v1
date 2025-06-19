@@ -29,7 +29,8 @@ interface ChatMessageProps {
   currentUser: UserProfile | null;
 }
 
-const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: ChatMessageProps) {
+// Define the component logic
+function ChatMessageComponent({ message, currentUser }: ChatMessageProps) {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -49,7 +50,7 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
     ? (message.timestamp as any).toDate() 
     : message.timestamp instanceof Date
     ? message.timestamp
-    : new Date(); // Fallback, though Firestore timestamps should be instances of Timestamp
+    : new Date();
 
   const handleDeleteMessage = useCallback(async () => {
     if (!isCurrentUserMessage || !message.id || !message.chatId) {
@@ -114,7 +115,7 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
                 onClick={() => {
                   const newWindow = window.open();
                   if (newWindow) {
-                    newWindow.document.write(\`<img src="\${message.imageDataUri}" alt="Full image" style="max-width: 100%; max-height: 100vh; display: block; margin: auto;" />\`);
+                    newWindow.document.write(`<img src="${message.imageDataUri}" alt="Full image" style="max-width: 100%; max-height: 100vh; display: block; margin: auto;" />`);
                     newWindow.document.title = "Image Preview";
                   }
                 }}
@@ -164,14 +165,13 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
       </div>
       {isCurrentUserMessage && (
         <Avatar className="h-8 w-8 self-end">
-          {/* Assuming currentUser.photoURL is not available for now, if it were, an Image component would go here */}
           <AvatarFallback>{getInitials(currentUser?.displayName)}</AvatarFallback>
         </Avatar>
       )}
     </div>
   );
-});
+}
 
-ChatMessage.displayName = 'ChatMessage';
-
-export { ChatMessage };
+// Memoize the component
+export const ChatMessage = React.memo(ChatMessageComponent);
+ChatMessage.displayName = 'ChatMessage'; // Optional: for better debugging in React DevTools
