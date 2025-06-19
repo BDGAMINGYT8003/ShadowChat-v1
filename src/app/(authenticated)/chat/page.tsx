@@ -1,3 +1,4 @@
+
 "use client";
 
 import { ChatHeader } from "@/components/chat/ChatHeader";
@@ -6,7 +7,7 @@ import { MessageList } from "@/components/chat/MessageList";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase/firebase";
 import type { Message } from "@/types";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, onSnapshot, orderBy, query, type DocumentData, type QuerySnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
 
 export default function ChatPage() {
@@ -22,9 +23,10 @@ export default function ChatPage() {
     const messagesRef = collection(db, "chats", chatId, "messages");
     const q = query(messagesRef, orderBy("timestamp", "asc"));
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
       const newMessages = querySnapshot.docs.map((doc) => ({
         id: doc.id,
+        chatId: chatId, // Add chatId to each message for delete context
         ...doc.data(),
       } as Message));
       setMessages(newMessages);

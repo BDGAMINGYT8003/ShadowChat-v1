@@ -3,10 +3,26 @@
 
 import type { Message, UserProfile } from "@/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { db } from "@/lib/firebase/firebase";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from 'date-fns';
+import { deleteDoc, doc } from "firebase/firestore";
+import { FileText, Mic, PlayCircle, Trash2, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { FileText, Mic, PlayCircle } from "lucide-react";
+import { useState } from "react";
 
 interface ChatMessageProps {
   message: Message;
@@ -14,6 +30,8 @@ interface ChatMessageProps {
 }
 
 export function ChatMessage({ message, currentUser }: ChatMessageProps) {
+  const { toast } = useToast();
+  const [isDeleting, setIsDeleting] = useState(false);
   const isCurrentUserMessage = message.senderId === currentUser?.uid;
 
   const getInitials = (name: string | null | undefined) => {
@@ -31,17 +49,45 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
     ? message.timestamp
     : new Date(); // Fallback to now if timestamp is invalid
 
+  const handleDeleteMessage = async () => {
+    if (!isCurrentUserMessage || !message.id || !message.chatId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Cannot delete this message.",
+      });
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      const messageRef = doc(db, "chats", message.chatId, "messages", message.id);
+      await deleteDoc(messageRef);
+      toast({
+        title: "Success",
+        description: "Message deleted.",
+      });
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete message. Please try again.",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
-    <div className={cn("flex gap-3 my-4", isCurrentUserMessage ? "justify-end" : "justify-start")}>
+    <div className={cn("flex gap-3 my-4 group", isCurrentUserMessage ? "justify-end" : "justify-start")}>
       {!isCurrentUserMessage && (
         <Avatar className="h-8 w-8 self-end">
-          {/* Assuming user profile pictures are not part of this scope yet */}
           <AvatarFallback>{getInitials(message.senderName)}</AvatarFallback>
         </Avatar>
       )}
       <div
         className={cn(
-          "max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-xl shadow-md",
+          "relative max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-xl shadow-md",
           isCurrentUserMessage
             ? "bg-primary text-primary-foreground rounded-br-none"
             : "bg-card text-card-foreground rounded-bl-none"
@@ -51,18 +97,19 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
           <p className="text-xs font-semibold mb-1 text-accent">{message.senderName || "Anonymous"}</p>
         )}
         {message.text && <p className="whitespace-pre-wrap break-words">{message.text}</p>}
+        
         {message.imageDataUri && (
           <div className="mt-2 relative max-w-full overflow-hidden rounded-md">
              <Image 
                 src={message.imageDataUri} 
                 alt="Uploaded image"
-                width={300} // Provide appropriate width and height, or use layout="fill" with a sized parent
+                width={300}
                 height={200}
                 className="cursor-pointer hover:opacity-90 transition-opacity object-cover"
                 onClick={() => {
                   const newWindow = window.open();
                   if (newWindow) {
-                    newWindow.document.write(`<img src="${message.imageDataUri}" alt="Full image" style="max-width: 100%; max-height: 100vh; display: block; margin: auto;" />`);
+                    newWindow.document.write(\`<img src="\${message.imageDataUri}" alt="Full image" style="max-width: 100%; max-height: 100vh; display: block; margin: auto;" />\`);
                     newWindow.document.title = "Image Preview";
                   }
                 }}
@@ -70,16 +117,52 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
               />
           </div>
         )}
-        {message.voiceUrl && ( // Placeholder for voice message UI
-          <div className="mt-2 flex items-center gap-2 p-2 bg-background/20 rounded-md">
-            <PlayCircle className="w-6 h-6 text-foreground/80" />
-            <span className="text-sm text-foreground/80">Voice Message</span>
-            {/* Placeholder for duration, e.g., <span className="text-xs text-muted-foreground">0:30</span> */}
+
+        {message.voiceDataUri && (
+          <div className="mt-2">
+            <audio controls src={message.voiceDataUri} className="w-full h-10">
+              Your browser does not support the audio element.
+            </audio>
           </div>
         )}
+
         <p className={cn("text-xs mt-2", isCurrentUserMessage ? "text-primary-foreground/70 text-right" : "text-muted-foreground text-left")}>
           {formatDistanceToNow(timestamp, { addSuffix: true })}
         </p>
+
+        {isCurrentUserMessage && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "absolute top-0.5 right-0.5 h-6 w-6 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity",
+                  isCurrentUserMessage ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary/70" : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
+                )}
+                aria-label="Delete message"
+                disabled={isDeleting}
+              >
+                {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete your message.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteMessage} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                  {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
       {isCurrentUserMessage && (
         <Avatar className="h-8 w-8 self-end">

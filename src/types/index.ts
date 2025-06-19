@@ -10,11 +10,12 @@ export interface UserProfile {
 
 export interface Message {
   id: string;
+  chatId?: string; // Added to help with Firestore path for deletion
   text?: string;
-  imageDataUri?: string; // Changed from imageUrl to store Base64 Data URI
-  voiceUrl?: string; // Placeholder for voice message URL
+  imageDataUri?: string; 
+  voiceDataUri?: string; // For Base64 encoded audio data
   senderId: string;
   senderName: string | null;
-  timestamp: Timestamp | Date; // Firestore serverTimestamp or client Date before sync
-  reactions?: { [emoji: string]: string[] }; // User UIDs who reacted
+  timestamp: Timestamp | Date;
+  reactions?: { [emoji: string]: string[] };
 }
