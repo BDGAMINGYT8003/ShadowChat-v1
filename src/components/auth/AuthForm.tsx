@@ -3,7 +3,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
+import { Eye, EyeOff, Loader2, LogIn, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -23,7 +23,7 @@ const formSchema = z.object({
     .min(3, "Username must be at least 3 characters")
     .max(20, "Username must be at most 20 characters")
     .optional()
-    .or(z.literal('').transform(() => undefined)), // Allow empty string and transform to undefined for optional validation
+    .or(z.literal('').transform(() => undefined)),
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
@@ -41,7 +41,7 @@ export function AuthForm() {
     defaultValues: {
       email: "",
       password: "",
-      username: "", // Keep default as empty string, Zod transform handles it
+      username: "", 
     },
   });
 
@@ -49,14 +49,12 @@ export function AuthForm() {
     setIsSubmitting(true);
     try {
       if (mode === "register") {
-        // Username is required for registration. The transform "" -> undefined means values.username will be undefined if empty.
         if (!values.username) { 
           toast({ variant: "destructive", title: "Error", description: "Username is required for registration." });
           setIsSubmitting(false);
           return;
         }
 
-        // Check for username uniqueness
         const usersRef = collection(db, "users");
         const q = query(usersRef, where("displayName", "==", values.username));
         const querySnapshot = await getDocs(q);
@@ -73,20 +71,18 @@ export function AuthForm() {
         const newUserProfile: UserProfile = {
             uid: userCredential.user.uid,
             email: userCredential.user.email,
-            displayName: values.username, // Save the chosen username as displayName
+            displayName: values.username,
         };
         await setDoc(doc(db, "users", userCredential.user.uid), newUserProfile);
 
         toast({ title: "Success", description: "Registration successful. You are now logged in." });
-      } else { // Login mode
+      } else { 
         await signInWithEmailAndPassword(auth, values.email, values.password);
         toast({ title: "Success", description: "Login successful." });
       }
-      // Redirect will be handled by AuthContext
     } catch (error: any) {
       console.error(`${mode} error:`, error);
       let errorMessage = `An error occurred during ${mode}.`;
-      // Check for Firebase specific auth errors for more user-friendly messages
       if (error.code) {
         switch (error.code) {
           case "auth/user-not-found":
@@ -114,14 +110,12 @@ export function AuthForm() {
     }
   };
   
-  // Reset username field when switching tabs to avoid validation issues
   const handleTabChange = (tabValue: string) => {
     setActiveTab(tabValue);
-    // If switching away from register, or to login, clear username to prevent validation issues.
-    // Or, more simply, always clear it if it's not the active mode's primary identifier.
-    // For this specific case, the Zod transform should handle it.
-    // Resetting form.clearErrors() can also be useful if errors persist across tab switches.
-    form.clearErrors("username"); // Clear potential username error from other tab
+    form.clearErrors("username"); 
+    form.resetField("username", {defaultValue: ""}); // Also reset the field value to avoid carrying over
+    form.resetField("email");
+    form.resetField("password");
   };
 
 
@@ -181,16 +175,11 @@ export function AuthForm() {
                       </FormItem>
                     )}
                   />
-                   {/* Username field: Only visually relevant for register, but part of the unified form state. 
-                       The Zod schema change ensures it doesn't block login if empty.
-                       You could conditionally render it or style it display:none for login tab
-                       if you want to hide it completely, but Zod fix is primary.
-                   */}
                   <FormField
                     control={form.control}
                     name="username"
                     render={({ field }) => (
-                      <FormItem className={activeTab === 'login' ? 'hidden' : ''}> 
+                      <FormItem className={'hidden'}> 
                         <FormLabel>Username</FormLabel>
                         <FormControl>
                           <Input placeholder="Choose a username" {...field} autoComplete="off" />
@@ -260,7 +249,7 @@ export function AuthForm() {
                     )}
                   />
                   <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : "Register"}
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : <><UserPlus className="mr-2" /> Register</>}
                   </Button>
                 </form>
               </Form>
@@ -271,6 +260,3 @@ export function AuthForm() {
     </div>
   );
 }
-
-
-    
