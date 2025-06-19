@@ -70,9 +70,13 @@ Make sure to replace `<your-cloudflare-project-name>` with the name of your proj
     *   **Environment Variables**:
         *   **Recommended**: Set `NODE_VERSION` to `18` or `20` (e.g., `NODE_VERSION = 20`).
         *   **Optional (if Firebase config is externalized)**: If you later move Firebase client-side config to environment variables, add them here (e.g., `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, etc.). For the current setup, these are not strictly required as the config is embedded.
+    *   **Compatibility Flags (Important for Next.js on Workers)**:
+        *   Navigate to your Pages project's **Settings** -> **Functions** -> **Compatibility Flags**.
+        *   Add the **`nodejs_compat`** flag for both your **Production** and **Preview** environments. This enables Node.js API compatibility required by some Next.js features when running on Cloudflare Workers.
 
 ### Important Notes for Cloudflare Deployment:
 
 *   **Firebase Services**: Your application's frontend will continue to interact with your Firebase backend (Firestore, Auth) as configured in `src/lib/firebase/firebase.ts`. Ensure your Firebase project's security rules allow access from your Cloudflare Pages domain if necessary (though typically not an issue for client-side SDK usage).
-*   **Edge Runtime Compatibility**: Server Components, Server Actions, and API Routes in your Next.js application will run on Cloudflare's Edge Workers. Ensure any server-side code is compatible with the Edge runtime (e.g., avoid Node.js-specific APIs not available in Workers unless you configure Node.js compatibility for your Pages project).
+*   **Edge Runtime Compatibility**: Server Components, Server Actions, and API Routes in your Next.js application will run on Cloudflare's Edge Workers. The `nodejs_compat` flag helps, but it's still good to be mindful that the environment is not a full Node.js server.
 *   The primary configuration of this app remains Firebase-centric. This Cloudflare setup provides an alternative deployment target for the Next.js frontend.
+
