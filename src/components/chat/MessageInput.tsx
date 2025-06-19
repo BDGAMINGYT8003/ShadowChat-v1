@@ -27,28 +27,27 @@ export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInp
   const { toast } = useToast();
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const sendMessageToFirestore = async (messageText: string, imageUrl?: string) => {
+  const sendMessageToFirestore = async (messageText: string, imageUrl?: string | null) => {
     if (!currentUser) {
       toast({ variant: "destructive", title: "Error", description: "User not authenticated." });
-      return;
-    }
-    if (messageText.trim() === "" && !imageUrl) {
-      toast({ variant: "destructive", title: "Empty Message", description: "Cannot send an empty message." });
-      return;
+      console.error("User not authenticated for sendMessageToFirestore");
+      return false;
     }
 
     setIsSendingFirestore(true);
+    console.log("Attempting to send message to Firestore:", { messageText, imageUrl });
+    let success = false;
     try {
       const messageData: {
         text: string | null;
         imageUrl?: string;
-        voiceUrl: string | null;
+        voiceUrl: string | null; // Placeholder
         senderId: string;
         senderName: string | null;
         timestamp: FieldValue;
       } = {
         text: messageText.trim() || null,
-        voiceUrl: null, // Placeholder
+        voiceUrl: null, 
         senderId: currentUser.uid,
         senderName: currentUser.displayName,
         timestamp: serverTimestamp(),
@@ -59,22 +58,22 @@ export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInp
       }
 
       await addDoc(collection(db, "chats", chatId, "messages"), messageData);
-
-      setText("");
-      setImageFile(null);
-      if(imageInputRef.current) imageInputRef.current.value = "";
-      // Toast for success is good, but let's avoid double toasting if image was also uploaded
-      if (!imageUrl) { // Only show generic sent if no image was involved in this direct call
-          toast({ title: "Sent!", description: "Your message has been sent.", variant: "default" });
-      } else {
-          toast({ title: "Image Sent!", description: "Your message with the image has been sent.", variant: "default" });
-      }
+      console.log("Message successfully sent to Firestore.");
+      toast({ title: "Sent!", description: "Your message has been sent.", variant: "default" });
+      success = true;
     } catch (error) {
       console.error("Error sending message to Firestore:", error);
-      toast({ variant: "destructive", title: "Send Error", description: "Failed to send message data." });
+      toast({ variant: "destructive", title: "Send Error", description: `Failed to send message: ${(error as Error).message}` });
+      success = false;
     } finally {
       setIsSendingFirestore(false);
+      if (success) {
+        setText("");
+        setImageFile(null);
+        if (imageInputRef.current) imageInputRef.current.value = "";
+      }
     }
+    return success;
   };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -83,27 +82,35 @@ export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInp
       toast({ variant: "destructive", title: "Error", description: "You must be logged in to send messages." });
       return;
     }
-    if (text.trim() === "" && !imageFile) return;
+    if (text.trim() === "" && !imageFile) {
+        toast({ variant: "destructive", title: "Empty Message", description: "Cannot send an empty message." });
+        return;
+    }
+    if (isUploadingImage || isSendingFirestore) return; // Prevent multiple submissions
+
+    let uploadedImageUrl: string | null = null;
 
     if (imageFile) {
       setIsUploadingImage(true);
+      console.log("Starting image upload for file:", imageFile.name);
       try {
         const storageRef = ref(storage, `chat_images/${chatId}/${Date.now()}_${imageFile.name}`);
         const snapshot = await uploadBytes(storageRef, imageFile);
-        const uploadedImageUrl = await getDownloadURL(snapshot.ref);
-        setIsUploadingImage(false); // Image uploaded successfully
-        await sendMessageToFirestore(text, uploadedImageUrl); // Now send message with image URL
+        uploadedImageUrl = await getDownloadURL(snapshot.ref);
+        console.log("Image uploaded successfully. URL:", uploadedImageUrl);
+        toast({ title: "Image Uploaded", description: "Image ready to be sent.", variant: "default" });
       } catch (error) {
         console.error("Error uploading image:", error);
-        toast({ variant: "destructive", title: "Image Upload Error", description: "Failed to upload image. Please try again." });
-        setIsUploadingImage(false);
-        // Do not proceed to send message if image upload failed
-        return;
+        toast({ variant: "destructive", title: "Image Upload Error", description: `Failed to upload image: ${(error as Error).message}. Please try again.` });
+        setIsUploadingImage(false); // Ensure state is reset
+        return; // Stop if image upload fails
+      } finally {
+        setIsUploadingImage(false); // Ensure state is reset in all cases
       }
-    } else {
-      // No image, just send the text message
-      await sendMessageToFirestore(text);
     }
+
+    // Proceed to send message (with or without image URL)
+    await sendMessageToFirestore(text, uploadedImageUrl);
   };
 
   const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -116,8 +123,10 @@ export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInp
         return;
       }
       setImageFile(file);
+      console.log("Image selected:", file.name);
     } else {
       setImageFile(null);
+      console.log("Image selection cleared.");
     }
   };
 
@@ -163,11 +172,11 @@ export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInp
           <Mic className={cn("text-muted-foreground hover:text-primary", isRecording && "text-destructive animate-pulse")} />
         </Button>
         <Button type="submit" size="icon" disabled={isProcessing || (text.trim() === "" && !imageFile)} aria-label="Send message">
-          {isUploadingImage ? <Loader2 className="animate-spin" /> : isSendingFirestore ? <Loader2 className="animate-spin" /> : <SendHorizonal />}
+          {isUploadingImage || isSendingFirestore ? <Loader2 className="animate-spin" /> : <SendHorizonal />}
         </Button>
       </div>
       {isUploadingImage && <p className="text-xs text-primary mt-1 text-center">Uploading image...</p>}
+      {isSendingFirestore && !isUploadingImage && <p className="text-xs text-primary mt-1 text-center">Sending message...</p>}
     </form>
   );
 }
-
