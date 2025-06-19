@@ -15,7 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { collection, doc, getDocs, query, setDoc, where } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import type { UserProfile } from "@/types";
 
 const formSchema = z.object({
@@ -55,16 +55,16 @@ export function AuthForm() {
           return;
         }
 
-        // Username uniqueness check (Potential point of Firestore permission error with restrictive rules)
-        const usersRef = collection(db, "users");
-        const q = query(usersRef, where("displayName", "==", values.username));
-        const querySnapshot = await getDocs(q);
+        // Username uniqueness check REMOVED
+        // const usersRef = collection(db, "users");
+        // const q = query(usersRef, where("displayName", "==", values.username));
+        // const querySnapshot = await getDocs(q);
 
-        if (!querySnapshot.empty) {
-          toast({ variant: "destructive", title: "Error", description: "Username already taken. Please choose another." });
-          setIsSubmitting(false);
-          return;
-        }
+        // if (!querySnapshot.empty) {
+        //   toast({ variant: "destructive", title: "Error", description: "Username already taken. Please choose another." });
+        //   setIsSubmitting(false);
+        //   return;
+        // }
 
         const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
         await updateProfile(userCredential.user, { displayName: values.username });
@@ -74,7 +74,6 @@ export function AuthForm() {
             email: userCredential.user.email,
             displayName: values.username,
         };
-        // This setDoc should work if request.auth.uid == userCredential.user.uid is true in rules
         await setDoc(doc(db, "users", userCredential.user.uid), newUserProfile);
 
         toast({ title: "Success", description: "Registration successful. You are now logged in." });
@@ -102,9 +101,9 @@ export function AuthForm() {
           case "auth/weak-password":
             errorMessage = "Password is too weak. It should be at least 6 characters.";
             break;
-          case "permission-denied": // Firestore permission error
+          case "permission-denied": 
           case "firestore/permission-denied":
-             errorMessage = "Missing or insufficient permissions. Please check Firestore rules. This often occurs during the username uniqueness check if rules are too restrictive for querying the users collection pre-authentication.";
+             errorMessage = "Missing or insufficient permissions. Please check Firestore rules.";
             break;
           default:
             errorMessage = error.message || `An error occurred during ${mode}.`;
@@ -118,7 +117,6 @@ export function AuthForm() {
   
   const handleTabChange = (tabValue: string) => {
     setActiveTab(tabValue);
-    // Reset form fields and errors when switching tabs
     form.reset({
       email: "",
       password: "",
@@ -184,7 +182,6 @@ export function AuthForm() {
                       </FormItem>
                     )}
                   />
-                  {/* Username field is part of the schema for validation consistency, but hidden for login */}
                   <FormField
                     control={form.control}
                     name="username"
