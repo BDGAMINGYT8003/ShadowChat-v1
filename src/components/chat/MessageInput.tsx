@@ -11,6 +11,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { ImagePlus, Loader2, Mic, Paperclip, SendHorizonal } from "lucide-react";
 import type { ChangeEvent} from 'react';
 import React, { useState, useRef } from "react";
+import { cn } from "@/lib/utils";
 
 interface MessageInputProps {
   currentUser: UserProfile | null;
