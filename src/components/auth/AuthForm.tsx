@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,19 +8,22 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
-import { auth } from "@/lib/firebase/firebase";
+import { auth, db } from "@/lib/firebase/firebase";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { doc, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase/firebase";
+import { collection, doc, getDocs, query, setDoc, where } from "firebase/firestore";
 import type { UserProfile } from "@/types";
 
 const formSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters").max(20, "Username must be at most 20 characters").optional(), // Optional for login
+  username: z.string()
+    .min(3, "Username must be at least 3 characters")
+    .max(20, "Username must be at most 20 characters")
+    .optional()
+    .or(z.literal('').transform(() => undefined)), // Allow empty string and transform to undefined for optional validation
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
@@ -37,7 +41,7 @@ export function AuthForm() {
     defaultValues: {
       email: "",
       password: "",
-      username: "",
+      username: "", // Keep default as empty string, Zod transform handles it
     },
   });
 
@@ -45,36 +49,81 @@ export function AuthForm() {
     setIsSubmitting(true);
     try {
       if (mode === "register") {
-        if (!values.username) {
+        // Username is required for registration. The transform "" -> undefined means values.username will be undefined if empty.
+        if (!values.username) { 
           toast({ variant: "destructive", title: "Error", description: "Username is required for registration." });
           setIsSubmitting(false);
           return;
         }
+
+        // Check for username uniqueness
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("displayName", "==", values.username));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          toast({ variant: "destructive", title: "Error", description: "Username already taken. Please choose another." });
+          setIsSubmitting(false);
+          return;
+        }
+
         const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
         await updateProfile(userCredential.user, { displayName: values.username });
         
-        // Create user profile in Firestore
         const newUserProfile: UserProfile = {
             uid: userCredential.user.uid,
             email: userCredential.user.email,
-            displayName: values.username,
+            displayName: values.username, // Save the chosen username as displayName
         };
         await setDoc(doc(db, "users", userCredential.user.uid), newUserProfile);
 
         toast({ title: "Success", description: "Registration successful. You are now logged in." });
-      } else {
+      } else { // Login mode
         await signInWithEmailAndPassword(auth, values.email, values.password);
         toast({ title: "Success", description: "Login successful." });
       }
-      // Redirect will be handled by AuthContext or useAuthRedirect hook
+      // Redirect will be handled by AuthContext
     } catch (error: any) {
       console.error(`${mode} error:`, error);
-      const errorMessage = error.message || `An error occurred during ${mode}.`;
+      let errorMessage = `An error occurred during ${mode}.`;
+      // Check for Firebase specific auth errors for more user-friendly messages
+      if (error.code) {
+        switch (error.code) {
+          case "auth/user-not-found":
+            errorMessage = "Login failed: No user found with this email.";
+            break;
+          case "auth/wrong-password":
+            errorMessage = "Login failed: Incorrect password.";
+            break;
+          case "auth/email-already-in-use":
+            errorMessage = "Registration failed: This email is already in use.";
+            break;
+          case "auth/invalid-email":
+            errorMessage = "Invalid email address format.";
+            break;
+          case "auth/weak-password":
+            errorMessage = "Password is too weak. It should be at least 6 characters.";
+            break;
+          default:
+            errorMessage = error.message || `An error occurred during ${mode}.`;
+        }
+      }
       toast({ variant: "destructive", title: "Error", description: errorMessage });
     } finally {
       setIsSubmitting(false);
     }
   };
+  
+  // Reset username field when switching tabs to avoid validation issues
+  const handleTabChange = (tabValue: string) => {
+    setActiveTab(tabValue);
+    // If switching away from register, or to login, clear username to prevent validation issues.
+    // Or, more simply, always clear it if it's not the active mode's primary identifier.
+    // For this specific case, the Zod transform should handle it.
+    // Resetting form.clearErrors() can also be useful if errors persist across tab switches.
+    form.clearErrors("username"); // Clear potential username error from other tab
+  };
+
 
   return (
     <div className="flex items-center justify-center min-h-screen p-4 bg-gradient-to-br from-background to-slate-900">
@@ -86,7 +135,7 @@ export function AuthForm() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="login" className="w-full" onValueChange={setActiveTab}>
+          <Tabs defaultValue="login" className="w-full" onValueChange={handleTabChange}>
             <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="login">Login</TabsTrigger>
               <TabsTrigger value="register">Register</TabsTrigger>
@@ -132,6 +181,24 @@ export function AuthForm() {
                       </FormItem>
                     )}
                   />
+                   {/* Username field: Only visually relevant for register, but part of the unified form state. 
+                       The Zod schema change ensures it doesn't block login if empty.
+                       You could conditionally render it or style it display:none for login tab
+                       if you want to hide it completely, but Zod fix is primary.
+                   */}
+                  <FormField
+                    control={form.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem className={activeTab === 'login' ? 'hidden' : ''}> 
+                        <FormLabel>Username</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Choose a username" {...field} autoComplete="off" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <Button type="submit" className="w-full" disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="animate-spin" /> : <><LogIn className="mr-2" /> Login</>}
                   </Button>
@@ -148,7 +215,7 @@ export function AuthForm() {
                       <FormItem>
                         <FormLabel>Username</FormLabel>
                         <FormControl>
-                          <Input placeholder="Choose a username" {...field} />
+                          <Input placeholder="Choose a username" {...field} autoComplete="username" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -161,7 +228,7 @@ export function AuthForm() {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input placeholder="your@email.com" {...field} />
+                          <Input placeholder="your@email.com" {...field} autoComplete="email" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -175,7 +242,7 @@ export function AuthForm() {
                         <FormLabel>Password</FormLabel>
                         <FormControl>
                            <div className="relative">
-                            <Input type={showPassword ? "text" : "password"} placeholder="Create a strong password" {...field} />
+                            <Input type={showPassword ? "text" : "password"} placeholder="Create a strong password" {...field} autoComplete="new-password" />
                             <Button
                               type="button"
                               variant="ghost"
@@ -204,3 +271,6 @@ export function AuthForm() {
     </div>
   );
 }
+
+
+    
