@@ -23,7 +23,7 @@ const formSchema = z.object({
     .min(3, "Username must be at least 3 characters")
     .max(20, "Username must be at most 20 characters")
     .optional()
-    .or(z.literal('').transform(() => undefined)),
+    .or(z.literal('').transform(() => undefined)), // Treat empty string as undefined for optional validation
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
@@ -41,7 +41,7 @@ export function AuthForm() {
     defaultValues: {
       email: "",
       password: "",
-      username: "", 
+      username: "",
     },
   });
 
@@ -49,12 +49,13 @@ export function AuthForm() {
     setIsSubmitting(true);
     try {
       if (mode === "register") {
-        if (!values.username) { 
+        if (!values.username) {
           toast({ variant: "destructive", title: "Error", description: "Username is required for registration." });
           setIsSubmitting(false);
           return;
         }
 
+        // Username uniqueness check (Potential point of Firestore permission error with restrictive rules)
         const usersRef = collection(db, "users");
         const q = query(usersRef, where("displayName", "==", values.username));
         const querySnapshot = await getDocs(q);
@@ -73,6 +74,7 @@ export function AuthForm() {
             email: userCredential.user.email,
             displayName: values.username,
         };
+        // This setDoc should work if request.auth.uid == userCredential.user.uid is true in rules
         await setDoc(doc(db, "users", userCredential.user.uid), newUserProfile);
 
         toast({ title: "Success", description: "Registration successful. You are now logged in." });
@@ -100,6 +102,10 @@ export function AuthForm() {
           case "auth/weak-password":
             errorMessage = "Password is too weak. It should be at least 6 characters.";
             break;
+          case "permission-denied": // Firestore permission error
+          case "firestore/permission-denied":
+             errorMessage = "Missing or insufficient permissions. Please check Firestore rules. This often occurs during the username uniqueness check if rules are too restrictive for querying the users collection pre-authentication.";
+            break;
           default:
             errorMessage = error.message || `An error occurred during ${mode}.`;
         }
@@ -112,10 +118,13 @@ export function AuthForm() {
   
   const handleTabChange = (tabValue: string) => {
     setActiveTab(tabValue);
-    form.clearErrors("username"); 
-    form.resetField("username", {defaultValue: ""}); // Also reset the field value to avoid carrying over
-    form.resetField("email");
-    form.resetField("password");
+    // Reset form fields and errors when switching tabs
+    form.reset({
+      email: "",
+      password: "",
+      username: "",
+    });
+    form.clearErrors();
   };
 
 
@@ -175,11 +184,12 @@ export function AuthForm() {
                       </FormItem>
                     )}
                   />
+                  {/* Username field is part of the schema for validation consistency, but hidden for login */}
                   <FormField
                     control={form.control}
                     name="username"
                     render={({ field }) => (
-                      <FormItem className={'hidden'}> 
+                      <FormItem className="hidden"> 
                         <FormLabel>Username</FormLabel>
                         <FormControl>
                           <Input placeholder="Choose a username" {...field} autoComplete="off" />
@@ -189,7 +199,7 @@ export function AuthForm() {
                     )}
                   />
                   <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : <><LogIn className="mr-2" /> Login</>}
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : <><LogIn className="mr-2 h-4 w-4" /> Login</>}
                   </Button>
                 </form>
               </Form>
@@ -249,7 +259,7 @@ export function AuthForm() {
                     )}
                   />
                   <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : <><UserPlus className="mr-2" /> Register</>}
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : <><UserPlus className="mr-2 h-4 w-4" /> Register</>}
                   </Button>
                 </form>
               </Form>
