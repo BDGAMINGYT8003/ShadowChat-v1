@@ -1,0 +1,206 @@
+"use client";
+
+import { zodResolver } from "@hookform/resolvers/zod";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+
+import { auth } from "@/lib/firebase/firebase";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/firebase";
+import type { UserProfile } from "@/types";
+
+const formSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters").max(20, "Username must be at most 20 characters").optional(), // Optional for login
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+export function AuthForm() {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [activeTab, setActiveTab] = useState("login");
+  const { toast } = useToast();
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      username: "",
+    },
+  });
+
+  const onSubmit = async (values: FormValues, mode: "login" | "register") => {
+    setIsSubmitting(true);
+    try {
+      if (mode === "register") {
+        if (!values.username) {
+          toast({ variant: "destructive", title: "Error", description: "Username is required for registration." });
+          setIsSubmitting(false);
+          return;
+        }
+        const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+        await updateProfile(userCredential.user, { displayName: values.username });
+        
+        // Create user profile in Firestore
+        const newUserProfile: UserProfile = {
+            uid: userCredential.user.uid,
+            email: userCredential.user.email,
+            displayName: values.username,
+        };
+        await setDoc(doc(db, "users", userCredential.user.uid), newUserProfile);
+
+        toast({ title: "Success", description: "Registration successful. You are now logged in." });
+      } else {
+        await signInWithEmailAndPassword(auth, values.email, values.password);
+        toast({ title: "Success", description: "Login successful." });
+      }
+      // Redirect will be handled by AuthContext or useAuthRedirect hook
+    } catch (error: any) {
+      console.error(`${mode} error:`, error);
+      const errorMessage = error.message || `An error occurred during ${mode}.`;
+      toast({ variant: "destructive", title: "Error", description: errorMessage });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen p-4 bg-gradient-to-br from-background to-slate-900">
+      <Card className="w-full max-w-md shadow-2xl bg-card/80 backdrop-blur-sm">
+        <CardHeader className="text-center">
+          <CardTitle className="text-3xl font-headline text-primary">ShadowChat</CardTitle>
+          <CardDescription>
+            {activeTab === "login" ? "Welcome back! Sign in to continue." : "Create an account to join the chat."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="login" className="w-full" onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="login">Login</TabsTrigger>
+              <TabsTrigger value="register">Register</TabsTrigger>
+            </TabsList>
+            <TabsContent value="login">
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(data => onSubmit(data, "login"))} className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input placeholder="your@email.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                              onClick={() => setShowPassword(!showPassword)}
+                              aria-label={showPassword ? "Hide password" : "Show password"}
+                            >
+                              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </Button>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : <><LogIn className="mr-2" /> Login</>}
+                  </Button>
+                </form>
+              </Form>
+            </TabsContent>
+            <TabsContent value="register">
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(data => onSubmit(data, "register"))} className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Username</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Choose a username" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input placeholder="your@email.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                           <div className="relative">
+                            <Input type={showPassword ? "text" : "password"} placeholder="Create a strong password" {...field} />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                              onClick={() => setShowPassword(!showPassword)}
+                              aria-label={showPassword ? "Hide password" : "Show password"}
+                            >
+                              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </Button>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : "Register"}
+                  </Button>
+                </form>
+              </Form>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
