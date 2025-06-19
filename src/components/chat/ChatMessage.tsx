@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Message, UserProfile } from "@/types";
@@ -34,7 +35,7 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
     <div className={cn("flex gap-3 my-4", isCurrentUserMessage ? "justify-end" : "justify-start")}>
       {!isCurrentUserMessage && (
         <Avatar className="h-8 w-8 self-end">
-          <AvatarImage src={undefined} alt={message.senderName || "User"} />
+          {/* Assuming user profile pictures are not part of this scope yet */}
           <AvatarFallback>{getInitials(message.senderName)}</AvatarFallback>
         </Avatar>
       )}
@@ -50,16 +51,22 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
           <p className="text-xs font-semibold mb-1 text-accent">{message.senderName || "Anonymous"}</p>
         )}
         {message.text && <p className="whitespace-pre-wrap break-words">{message.text}</p>}
-        {message.imageUrl && (
-          <div className="mt-2 relative aspect-video max-w-full overflow-hidden rounded-md">
+        {message.imageDataUri && (
+          <div className="mt-2 relative max-w-full overflow-hidden rounded-md">
              <Image 
-                src={message.imageUrl} 
-                alt="Uploaded image" 
-                layout="fill" 
-                objectFit="cover"
-                className="cursor-pointer hover:opacity-90 transition-opacity"
-                onClick={() => window.open(message.imageUrl, '_blank')}
-                data-ai-hint="chat image"
+                src={message.imageDataUri} 
+                alt="Uploaded image"
+                width={300} // Provide appropriate width and height, or use layout="fill" with a sized parent
+                height={200}
+                className="cursor-pointer hover:opacity-90 transition-opacity object-cover"
+                onClick={() => {
+                  const newWindow = window.open();
+                  if (newWindow) {
+                    newWindow.document.write(`<img src="${message.imageDataUri}" alt="Full image" style="max-width: 100%; max-height: 100vh; display: block; margin: auto;" />`);
+                    newWindow.document.title = "Image Preview";
+                  }
+                }}
+                data-ai-hint="chat image content"
               />
           </div>
         )}

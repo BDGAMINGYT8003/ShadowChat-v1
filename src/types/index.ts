@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface UserProfile {
@@ -10,7 +11,7 @@ export interface UserProfile {
 export interface Message {
   id: string;
   text?: string;
-  imageUrl?: string;
+  imageDataUri?: string; // Changed from imageUrl to store Base64 Data URI
   voiceUrl?: string; // Placeholder for voice message URL
   senderId: string;
   senderName: string | null;
