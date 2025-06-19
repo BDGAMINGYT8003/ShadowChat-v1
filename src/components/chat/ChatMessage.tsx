@@ -20,7 +20,7 @@ import { db } from "@/lib/firebase/firebase";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from 'date-fns';
 import { deleteDoc, doc } from "firebase/firestore";
-import { FileText, Mic, PlayCircle, Trash2, Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 
@@ -32,9 +32,11 @@ interface ChatMessageProps {
 export function ChatMessage({ message, currentUser }: ChatMessageProps) {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   const isCurrentUserMessage = message.senderId === currentUser?.uid;
 
-  const getInitials = (name: string | null | undefined) => {
+  const getInitials = (name: string | null | undefined): string => {
     if (!name) return "??";
     const names = name.split(' ');
     if (names.length > 1) {
@@ -56,6 +58,7 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
         title: "Error",
         description: "Cannot delete this message.",
       });
+      setShowDeleteConfirm(false); 
       return;
     }
     setIsDeleting(true);
@@ -66,15 +69,16 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
         title: "Success",
         description: "Message deleted.",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting message:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete message. Please try again.",
+        description: error.message || "Failed to delete message. Please try again.",
       });
     } finally {
       setIsDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -96,6 +100,7 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
         {!isCurrentUserMessage && (
           <p className="text-xs font-semibold mb-1 text-accent">{message.senderName || "Anonymous"}</p>
         )}
+        
         {message.text && <p className="whitespace-pre-wrap break-words">{message.text}</p>}
         
         {message.imageDataUri && (
@@ -109,7 +114,7 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
                 onClick={() => {
                   const newWindow = window.open();
                   if (newWindow) {
-                    newWindow.document.write(\`<img src="\${message.imageDataUri}" alt="Full image" style="max-width: 100%; max-height: 100vh; display: block; margin: auto;" />\`);
+                    newWindow.document.write(`<img src="${message.imageDataUri}" alt="Full image" style="max-width: 100%; max-height: 100vh; display: block; margin: auto;" />`);
                     newWindow.document.title = "Image Preview";
                   }
                 }}
@@ -131,7 +136,7 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
         </p>
 
         {isCurrentUserMessage && (
-          <AlertDialog>
+          <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
             <AlertDialogTrigger asChild>
               <Button
                 variant="ghost"
@@ -141,6 +146,7 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
                   isCurrentUserMessage ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary/70" : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
                 )}
                 aria-label="Delete message"
+                onClick={() => setShowDeleteConfirm(true)}
                 disabled={isDeleting}
               >
                 {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
@@ -154,7 +160,7 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                <AlertDialogCancel disabled={isDeleting} onClick={() => setShowDeleteConfirm(false)}>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={handleDeleteMessage} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                   {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Delete
