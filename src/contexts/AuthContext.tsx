@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { User } from 'firebase/auth';
@@ -28,13 +29,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user: User | null) => {
       if (user) {
-        // Fetch or create user profile in Firestore
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
           setCurrentUser(userSnap.data() as UserProfile);
         } else {
-          // Create a new profile if it doesn't exist (e.g. after registration)
           const newUserProfile: UserProfile = {
             uid: user.uid,
             email: user.email,
@@ -54,18 +53,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    if (initialLoadComplete && !loading) {
-      const isAuthPage = pathname === '/';
-      if (!currentUser && !isAuthPage) {
-        router.push('/');
-      } else if (currentUser && isAuthPage) {
-        router.push('/chat');
-      }
+    // Only redirect once the initial authentication state is fully determined
+    if (!initialLoadComplete || loading) {
+      return;
+    }
+
+    const isAuthPage = pathname === '/';
+    if (currentUser && isAuthPage) {
+      router.replace('/chat'); // Use replace to avoid back button to auth page
+    } else if (!currentUser && !isAuthPage) {
+      router.replace('/'); // Use replace
     }
   }, [currentUser, loading, initialLoadComplete, router, pathname]);
 
 
-  if (loading && !initialLoadComplete) {
+  // Show a global loader until the initial auth state (including profile fetch) is resolved.
+  if (!initialLoadComplete) {
      return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -73,25 +76,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
   }
   
-  // Allow rendering auth page while loading, or if initial load complete and no user
-  if (!currentUser && pathname === '/') {
-    return (
-      <AuthContext.Provider value={{ currentUser, loading, initialLoadComplete }}>
-        {children}
-      </AuthContext.Provider>
-    );
-  }
-
-  // If trying to access protected route while loading or no user
-  if ((loading || !currentUser) && pathname !== '/') {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
-  
-
+  // Once initial load is complete, AuthContext is ready.
+  // Child components (like AuthenticatedLayout or page.tsx) will handle their own rendering
+  // based on the context values (currentUser, loading).
   return (
     <AuthContext.Provider value={{ currentUser, loading, initialLoadComplete }}>
       {children}
@@ -106,3 +93,4 @@ export const useAuth = () => {
   }
   return context;
 };
+
