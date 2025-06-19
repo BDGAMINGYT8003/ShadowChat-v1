@@ -13,6 +13,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Added missing import
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase/firebase";
@@ -21,14 +22,13 @@ import { formatDistanceToNow } from 'date-fns';
 import { deleteDoc, doc } from "firebase/firestore";
 import { Loader2, Trash2 } from "lucide-react";
 import Image from "next/image";
-import React, { useState, useCallback } from "react"; // Import React and useCallback
+import React, { useState, useCallback } from "react";
 
 interface ChatMessageProps {
   message: Message;
   currentUser: UserProfile | null;
 }
 
-// Wrap ChatMessage with React.memo
 const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: ChatMessageProps) {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -49,9 +49,8 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
     ? (message.timestamp as any).toDate() 
     : message.timestamp instanceof Date
     ? message.timestamp
-    : new Date(); // Fallback to now if timestamp is invalid
+    : new Date();
 
-  // Wrap handleDeleteMessage in useCallback
   const handleDeleteMessage = useCallback(async () => {
     if (!isCurrentUserMessage || !message.id || !message.chatId) {
       toast({
@@ -81,7 +80,7 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
       setIsDeleting(false);
       setShowDeleteConfirm(false);
     }
-  }, [isCurrentUserMessage, message.id, message.chatId, toast]); // Add dependencies
+  }, [isCurrentUserMessage, message.id, message.chatId, toast]);
 
   return (
     <div className={cn("flex gap-3 my-4 group", isCurrentUserMessage ? "justify-end" : "justify-start")}>
@@ -109,8 +108,8 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
              <Image 
                 src={message.imageDataUri} 
                 alt="Uploaded image"
-                width={300} // Provide appropriate width
-                height={200} // Provide appropriate height
+                width={300} 
+                height={200} 
                 className="cursor-pointer hover:opacity-90 transition-opacity object-cover"
                 onClick={() => {
                   const newWindow = window.open();
@@ -139,7 +138,7 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
                   isCurrentUserMessage ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary/70" : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
                 )}
                 aria-label="Delete message"
-                onClick={() => setShowDeleteConfirm(true)} // No need to pass event here
+                onClick={() => setShowDeleteConfirm(true)} 
                 disabled={isDeleting}
               >
                 {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
@@ -165,7 +164,6 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
       </div>
       {isCurrentUserMessage && (
         <Avatar className="h-8 w-8 self-end">
-          {/* Use next/image for user avatar if photoURL exists, otherwise fallback */}
           {currentUser?.photoURL ? (
             <Image src={currentUser.photoURL} alt={currentUser.displayName || "User"} width={32} height={32} className="rounded-full" />
           ) : (
@@ -177,4 +175,4 @@ const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: Ch
   );
 });
 
-export { ChatMessage }; // Export the memoized component
+export { ChatMessage };
