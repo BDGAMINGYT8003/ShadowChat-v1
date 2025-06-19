@@ -2,7 +2,7 @@
 "use client";
 
 import type { Message, UserProfile } from "@/types";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -13,7 +13,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase/firebase";
@@ -22,14 +21,15 @@ import { formatDistanceToNow } from 'date-fns';
 import { deleteDoc, doc } from "firebase/firestore";
 import { Loader2, Trash2 } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import React, { useState, useCallback } from "react"; // Import React and useCallback
 
 interface ChatMessageProps {
   message: Message;
   currentUser: UserProfile | null;
 }
 
-export function ChatMessage({ message, currentUser }: ChatMessageProps) {
+// Wrap ChatMessage with React.memo
+const ChatMessage = React.memo(function ChatMessage({ message, currentUser }: ChatMessageProps) {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -51,7 +51,8 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
     ? message.timestamp
     : new Date(); // Fallback to now if timestamp is invalid
 
-  const handleDeleteMessage = async () => {
+  // Wrap handleDeleteMessage in useCallback
+  const handleDeleteMessage = useCallback(async () => {
     if (!isCurrentUserMessage || !message.id || !message.chatId) {
       toast({
         variant: "destructive",
@@ -80,7 +81,7 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
     }
-  };
+  }, [isCurrentUserMessage, message.id, message.chatId, toast]); // Add dependencies
 
   return (
     <div className={cn("flex gap-3 my-4 group", isCurrentUserMessage ? "justify-end" : "justify-start")}>
@@ -108,8 +109,8 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
              <Image 
                 src={message.imageDataUri} 
                 alt="Uploaded image"
-                width={300}
-                height={200}
+                width={300} // Provide appropriate width
+                height={200} // Provide appropriate height
                 className="cursor-pointer hover:opacity-90 transition-opacity object-cover"
                 onClick={() => {
                   const newWindow = window.open();
@@ -120,14 +121,6 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
                 }}
                 data-ai-hint="chat image content"
               />
-          </div>
-        )}
-
-        {message.voiceDataUri && (
-          <div className="mt-2">
-            <audio controls src={message.voiceDataUri} className="w-full h-10">
-              Your browser does not support the audio element.
-            </audio>
           </div>
         )}
 
@@ -146,7 +139,7 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
                   isCurrentUserMessage ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary/70" : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
                 )}
                 aria-label="Delete message"
-                onClick={() => setShowDeleteConfirm(true)}
+                onClick={() => setShowDeleteConfirm(true)} // No need to pass event here
                 disabled={isDeleting}
               >
                 {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
@@ -172,10 +165,16 @@ export function ChatMessage({ message, currentUser }: ChatMessageProps) {
       </div>
       {isCurrentUserMessage && (
         <Avatar className="h-8 w-8 self-end">
-          <AvatarImage src={currentUser?.photoURL || undefined} alt={currentUser?.displayName || "User"} />
-          <AvatarFallback>{getInitials(currentUser?.displayName)}</AvatarFallback>
+          {/* Use next/image for user avatar if photoURL exists, otherwise fallback */}
+          {currentUser?.photoURL ? (
+            <Image src={currentUser.photoURL} alt={currentUser.displayName || "User"} width={32} height={32} className="rounded-full" />
+          ) : (
+            <AvatarFallback>{getInitials(currentUser?.displayName)}</AvatarFallback>
+          )}
         </Avatar>
       )}
     </div>
   );
-}
+});
+
+export { ChatMessage }; // Export the memoized component

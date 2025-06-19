@@ -13,9 +13,9 @@ export interface Message {
   chatId?: string; // Added to help with Firestore path for deletion
   text?: string;
   imageDataUri?: string; 
-  voiceDataUri?: string; // For Base64 encoded audio data
   senderId: string;
   senderName: string | null;
   timestamp: Timestamp | Date;
   reactions?: { [emoji: string]: string[] };
 }
+

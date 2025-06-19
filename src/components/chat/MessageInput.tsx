@@ -4,13 +4,13 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase/firebase";
+import { db, storage } from "@/lib/firebase/firebase";
 import type { UserProfile } from "@/types";
 import { addDoc, collection, serverTimestamp, type FieldValue } from "firebase/firestore";
-import { ImagePlus, Loader2, Mic, SendHorizonal } from "lucide-react";
+import { getDownloadURL, ref as storageRef, uploadString } from "firebase/storage";
+import { ImagePlus, Loader2, SendHorizonal } from "lucide-react";
 import type { ChangeEvent} from 'react';
 import React, { useState, useRef } from "react";
-import { cn } from "@/lib/utils";
 
 interface MessageInputProps {
   currentUser: UserProfile | null;
@@ -19,10 +19,13 @@ interface MessageInputProps {
 
 export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInputProps) {
   const [text, setText] = useState("");
-  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [imageBase64Preview, setImageBase64Preview] = useState<string | null>(null); // For preview only
   const [imageFileName, setImageFileName] = useState<string | null>(null);
-  const [isProcessingImage, setIsProcessingImage] = useState(false);
-  const [isSending, setIsSending] = useState(false);
+  
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isSendingFirestore, setIsSendingFirestore] = useState(false);
+  
   const { toast } = useToast();
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -35,42 +38,84 @@ export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInp
     });
   };
 
-  const sendMessageToFirestore = async (messageText: string, imageDataUri?: string | null) => {
+  const clearImageSelection = () => {
+    setSelectedImageFile(null);
+    setImageBase64Preview(null);
+    setImageFileName(null);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = "";
+    }
+  };
+
+  const uploadImageToStorage = async (file: File): Promise<string | null> => {
     if (!currentUser) {
-      toast({ variant: "destructive", title: "Error", description: "User not authenticated." });
+      toast({ variant: "destructive", title: "Auth Error", description: "User not authenticated for image upload." });
+      return null;
+    }
+    setIsUploadingImage(true);
+    console.log("Starting image upload to Firebase Storage...");
+    try {
+      const uniqueFileName = `${currentUser.uid}_${Date.now()}_${file.name}`;
+      const imageRef = storageRef(storage, `chat_images/${chatId}/${uniqueFileName}`);
+      
+      // Convert file to base64 data URL for uploadString
+      const base64DataUrl = await convertFileToBase64(file);
+      
+      const snapshot = await uploadString(imageRef, base64DataUrl, 'data_url');
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      console.log("Image uploaded successfully. Download URL:", downloadURL);
+      toast({ title: "Image Uploaded", description: "Image ready to be sent.", variant: "default" });
+      return downloadURL;
+    } catch (error: any) {
+      console.error("Firebase Storage Upload Error:", error);
+      let description = "Failed to upload image.";
+      if (error.code) {
+        description = `Image upload failed: ${error.code} - ${error.message}`;
+      } else if (error.message) {
+        description = `Image upload failed: ${error.message}`;
+      }
+      toast({ variant: "destructive", title: "Upload Error", description });
+      return null;
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const sendMessageToFirestore = async (messageText: string, imageUrl?: string | null) => {
+    if (!currentUser) {
+      toast({ variant: "destructive", title: "Auth Error", description: "User not authenticated to send message." });
       return false;
     }
-
-    setIsSending(true);
+    setIsSendingFirestore(true);
+    console.log("Sending message to Firestore...");
     let success = false;
     try {
       const messageData: {
         text: string | null;
-        imageDataUri?: string;
-        voiceUrl: string | null;
+        imageDataUri?: string; // Changed from imageUrl to imageDataUri to match Firestore storage
         senderId: string;
         senderName: string | null;
         timestamp: FieldValue;
       } = {
         text: messageText.trim() || null,
-        voiceUrl: null, // Voice functionality not implemented yet
         senderId: currentUser.uid,
         senderName: currentUser.displayName,
         timestamp: serverTimestamp(),
       };
 
-      if (imageDataUri) {
-        messageData.imageDataUri = imageDataUri;
+      if (imageUrl) { // If an image was uploaded to storage, this will be its download URL
+        messageData.imageDataUri = imageUrl; // Store the download URL
       }
 
       await addDoc(collection(db, "chats", chatId, "messages"), messageData);
       toast({ title: "Sent!", description: "Your message has been sent.", variant: "default" });
       success = true;
-    } catch (error: any) {
-      console.error("Error sending message to Firestore:", error);
+    } catch (error: any)
+     {
+      console.error("Firestore Send Error:", error);
       let description = "Failed to send message.";
-      if (error.message && error.message.includes("INVALID_ARGUMENT") && error.message.includes("document is too large")) {
-        description = "Failed to send message: Image is too large for Firestore. Please use a smaller image.";
+      if (error.code === 'resource-exhausted' || (error.message && error.message.includes("document is too large"))) {
+        description = "Message (possibly image) is too large for Firestore. Please use a smaller image or shorter text.";
       } else if (error.code) {
         description = `Failed to send message: ${error.code} - ${error.message}`;
       } else if (error.message) {
@@ -79,13 +124,7 @@ export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInp
       toast({ variant: "destructive", title: "Send Error", description });
       success = false;
     } finally {
-      setIsSending(false);
-      if (success) {
-        setText("");
-        setImageBase64(null);
-        setImageFileName(null);
-        if (imageInputRef.current) imageInputRef.current.value = "";
-      }
+      setIsSendingFirestore(false);
     }
     return success;
   };
@@ -93,67 +132,80 @@ export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInp
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!currentUser) {
-      toast({ variant: "destructive", title: "Error", description: "You must be logged in to send messages." });
+      toast({ variant: "destructive", title: "Auth Error", description: "You must be logged in to send messages." });
       return;
     }
-    if (text.trim() === "" && !imageBase64) {
+    if (text.trim() === "" && !selectedImageFile) {
         toast({ variant: "destructive", title: "Empty Message", description: "Cannot send an empty message." });
         return;
     }
-    if (isProcessingImage || isSending) return;
+    if (isUploadingImage || isSendingFirestore) return;
 
-    await sendMessageToFirestore(text, imageBase64);
+    let finalImageUrl: string | null = null;
+
+    if (selectedImageFile) {
+      finalImageUrl = await uploadImageToStorage(selectedImageFile);
+      if (!finalImageUrl) { // Image upload failed
+        return; // Error toast would have been shown by uploadImageToStorage
+      }
+    }
+    
+    // Proceed to send message to Firestore (with or without image URL)
+    const firestoreSuccess = await sendMessageToFirestore(text, finalImageUrl);
+
+    if (firestoreSuccess) {
+      setText("");
+      clearImageSelection();
+    }
+    // If image uploaded but Firestore failed, image selection and text remain for retry.
   };
 
   const handleImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.size > 1.5 * 1024 * 1024) { // ~1.5MB limit for original file, Base64 will be larger
-        toast({ variant: "destructive", title: "File too large", description: "Image size should ideally be under 1MB for Base64 storage. This might fail." });
-        // Allow trying, but warn. Firestore limit is 1MiB for the whole doc.
+      // Firestore document limit is 1MiB. Base64 encoding adds ~33%.
+      // Let's warn for original files over 700KB as they might exceed this after encoding.
+      // This warning is for Base64 storage. For Firebase Storage, limits are much higher.
+      // Since we switched to Firebase Storage, this specific size check is less critical here,
+      // but good to keep in mind for general file handling. Let's keep a generic one for preview.
+      if (file.size > 5 * 1024 * 1024) { // Warn for files > 5MB for preview generation
+        toast({ variant: "destructive", title: "File too large for preview", description: "Selected image is very large, preview might be slow or fail. Upload will proceed." });
       }
-      setIsProcessingImage(true);
+      
+      setSelectedImageFile(file);
       setImageFileName(file.name);
+
+      // Generate Base64 preview (optional, can be slow for large images)
       try {
-        const base64String = await convertFileToBase64(file);
-        setImageBase64(base64String);
-        console.log("Image converted to Base64 successfully.");
+        const base64PreviewString = await convertFileToBase64(file);
+        setImageBase64Preview(base64PreviewString); // For local preview before upload
       } catch (error) {
-        console.error("Error converting image to Base64:", error);
-        toast({ variant: "destructive", title: "Image Error", description: "Could not process image." });
-        setImageBase64(null);
-        setImageFileName(null);
-        if (imageInputRef.current) imageInputRef.current.value = "";
-      } finally {
-        setIsProcessingImage(false);
+        console.error("Error generating image preview:", error);
+        setImageBase64Preview(null); // Clear preview on error
+        toast({ variant: "destructive", title: "Preview Error", description: "Could not generate image preview." });
       }
+
     } else {
-      setImageBase64(null);
-      setImageFileName(null);
+      clearImageSelection();
     }
   };
-
-  const handleVoiceRecord = () => {
-    // Voice recording UI only, not functional
-    setIsRecording(!isRecording);
-    if(!isRecording) {
-        toast({ title: "Voice Recording", description: "Voice recording started (UI only)." });
-    } else {
-        toast({ title: "Voice Recording", description: "Voice recording stopped (UI only). Message not sent." });
-    }
-  };
-  const [isRecording, setIsRecording] = useState(false); // For UI feedback on voice
-
-  const isCurrentlyProcessing = isProcessingImage || isSending;
+  
+  const isCurrentlyProcessing = isUploadingImage || isSendingFirestore;
 
   return (
     <form onSubmit={handleSendMessage} className="sticky bottom-0 p-4 border-t bg-card/90 backdrop-blur-sm shadow-t-lg">
       {imageFileName && (
-        <div className="mb-2 text-sm text-muted-foreground">
-          Selected image: {imageFileName}
-          <Button variant="link" size="sm" onClick={() => { setImageBase64(null); setImageFileName(null); if(imageInputRef.current) imageInputRef.current.value = ""; }} className="ml-2 text-destructive" disabled={isCurrentlyProcessing}>Remove</Button>
+        <div className="mb-2 text-sm text-muted-foreground flex items-center justify-between">
+          <span>Selected: {imageFileName}</span>
+          <Button variant="link" size="sm" onClick={clearImageSelection} className="text-destructive p-0 h-auto" disabled={isCurrentlyProcessing}>Remove</Button>
         </div>
       )}
+      {imageBase64Preview && !isUploadingImage && ( // Show preview if available and not currently uploading
+        <div className="mb-2 relative w-32 h-32 overflow-hidden rounded-md border">
+          <img src={imageBase64Preview} alt="Preview" className="object-cover w-full h-full" />
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
         <Textarea
           value={text}
@@ -173,15 +225,12 @@ export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInp
         <Button type="button" variant="ghost" size="icon" onClick={() => imageInputRef.current?.click()} disabled={isCurrentlyProcessing} aria-label="Attach image">
           <ImagePlus className="text-muted-foreground hover:text-primary" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" onClick={handleVoiceRecord} disabled={isCurrentlyProcessing} aria-label="Record voice message">
-          <Mic className={cn("text-muted-foreground hover:text-primary", isRecording && "text-destructive animate-pulse")} />
-        </Button>
-        <Button type="submit" size="icon" disabled={isCurrentlyProcessing || (text.trim() === "" && !imageBase64)} aria-label="Send message">
-          {isProcessingImage ? <Loader2 className="animate-spin" /> : isSending ? <Loader2 className="animate-spin" /> : <SendHorizonal />}
+        <Button type="submit" size="icon" disabled={isCurrentlyProcessing || (text.trim() === "" && !selectedImageFile)} aria-label="Send message">
+          {isUploadingImage || isSendingFirestore ? <Loader2 className="animate-spin" /> : <SendHorizonal />}
         </Button>
       </div>
-      {isProcessingImage && <p className="text-xs text-primary mt-1 text-center">Processing image...</p>}
-      {isSending && !isProcessingImage && <p className="text-xs text-primary mt-1 text-center">Sending message...</p>}
+      {isUploadingImage && <p className="text-xs text-primary mt-1 text-center">Uploading image...</p>}
+      {isSendingFirestore && !isUploadingImage && <p className="text-xs text-primary mt-1 text-center">Sending message...</p>}
     </form>
   );
 }
