@@ -3,11 +3,10 @@
 // It's recommended to use environment variables for these in a production application.
 
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID" // Optional, for Google Analytics
+  apiKey: "AIzaSyANQGe1uv4WUQGaprmvtsH33ZxqzKCGN8Y",
+  authDomain: "vajro-kantho.firebaseapp.com",
+  projectId: "vajro-kantho",
+  storageBucket: "vajro-kantho.appspot.com", // Corrected from .firebasestorage.app to .appspot.com
+  messagingSenderId: "211774937738",
+  appId: "1:211774937738:web:bd0440f10841cc4bd52b73"
 };
