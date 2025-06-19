@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db, storage } from "@/lib/firebase/firebase";
 import type { UserProfile } from "@/types";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp, type FieldValue } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { ImagePlus, Loader2, Mic, Paperclip, SendHorizonal } from "lucide-react";
 import type { ChangeEvent} from 'react';
@@ -36,21 +37,33 @@ export function MessageInput({ currentUser, chatId = "global_chat" }: MessageInp
 
     setIsSending(true);
     try {
-      let imageUrl: string | undefined = undefined;
+      let uploadedImageUrl: string | undefined = undefined;
       if (imageFile) {
         const storageRef = ref(storage, `chat_images/${chatId}/${Date.now()}_${imageFile.name}`);
         const snapshot = await uploadBytes(storageRef, imageFile);
-        imageUrl = await getDownloadURL(snapshot.ref);
+        uploadedImageUrl = await getDownloadURL(snapshot.ref);
       }
 
-      await addDoc(collection(db, "chats", chatId, "messages"), {
-        text: text.trim() || null, // Store null if only image
-        imageUrl,
+      const messageData: {
+        text: string | null;
+        imageUrl?: string;
+        voiceUrl: string | null;
+        senderId: string;
+        senderName: string | null;
+        timestamp: FieldValue;
+      } = {
+        text: text.trim() || null,
         voiceUrl: null, // Placeholder
         senderId: currentUser.uid,
         senderName: currentUser.displayName,
         timestamp: serverTimestamp(),
-      });
+      };
+
+      if (uploadedImageUrl) {
+        messageData.imageUrl = uploadedImageUrl;
+      }
+
+      await addDoc(collection(db, "chats", chatId, "messages"), messageData);
 
       setText("");
       setImageFile(null);
